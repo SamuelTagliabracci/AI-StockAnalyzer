@@ -21,8 +21,8 @@ A comprehensive stock analysis tool specifically designed for Toronto Stock Exch
 
 1. Clone or download the project:
 ```bash
-git clone <repository-url>
-cd Stocks
+git clone https://github.com/SamuelTagliabracci/AI-StockAnalyzer.git
+cd AI-StockAnalyzer
 ```
 
 2. Create and activate a virtual environment:
