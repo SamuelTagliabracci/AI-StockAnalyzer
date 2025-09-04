@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TSX Stock Analyzer</title>
+    <script src="../assets/js/react.development.js"></script>
+    <script src="../assets/js/react-dom.development.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .app-container {
+            min-height: 100vh;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            padding: 1.5rem;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+
+        .stocks-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            overflow: hidden;
+        }
+
+        .stocks-header {
+            padding: 1.5rem 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stocks-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .stocks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+            padding: 2rem;
+        }
+
+        .stock-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e1e8ed;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stock-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+            border-color: #667eea;
+        }
+
+        .stock-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .stock-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .stock-info h3 {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 0.25rem;
+        }
+
+        .stock-info .symbol {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .stock-info .sector {
+            color: #7f8c8d;
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+        }
+
+        .score-badge {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .recommendation {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+            background: #d5f4e6;
+            color: #27ae60;
+        }
+
+        .price-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 1rem;
+            border-top: 1px solid #ecf0f1;
+        }
+
+        .current-price {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .upside {
+            color: #27ae60;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            color: #667eea;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script>
+        const { useState, useEffect, useCallback } = React;
+        
+        function TSXAnalyzer() {
+            const [stocks, setStocks] = useState([]);
+            const [loading, setLoading] = useState(true);
+            
+            // Fetch stocks data
+            const fetchStocks = useCallback(async () => {
+                try {
+                    const response = await fetch('http://localhost:5001/api/stocks?include_partial=true');
+                    const stocksData = await response.json();
+                    setStocks(stocksData);
+                    setLoading(false);
+                } catch (error) {
+                    console.error('Error fetching stocks:', error);
+                    // Use mock data if API fails
+                    const mockStocks = [
+                        {
+                            symbol: 'SHOP.TO',
+                            name: 'Shopify Inc.',
+                            sector: 'Technology',
+                            total_score: 85,
+                            recommendation: 'STRONG BUY',
+                            current_price: 89.45,
+                            target_price: 110.00,
+                            upside_potential: 0.23
+                        },
+                        {
+                            symbol: 'RY.TO',
+                            name: 'Royal Bank of Canada',
+                            sector: 'Financial Services',
+                            total_score: 78,
+                            recommendation: 'BUY',
+                            current_price: 142.30,
+                            target_price: 165.00,
+                            upside_potential: 0.16
+                        }
+                    ];
+                    setStocks(mockStocks);
+                    setLoading(false);
+                }
+            }, []);
+            
+            // Initial load
+            useEffect(() => {
+                fetchStocks();
+            }, [fetchStocks]);
+            
+            const formatCurrency = (value) => {
+                return new Intl.NumberFormat('en-CA', {
+                    style: 'currency',
+                    currency: 'CAD'
+                }).format(value);
+            };
+            
+            const formatPercentage = (value) => {
+                return `${(value * 100).toFixed(1)}%`;
+            };
+            
+            const stats = {
+                totalStocks: stocks.length,
+                strongBuys: stocks.filter(s => s.recommendation === 'STRONG BUY').length,
+                avgScore: stocks.length > 0 ? Math.round(stocks.reduce((sum, s) => sum + (s.total_score || 0), 0) / stocks.length) : 0
+            };
+            
+            if (loading) {
+                return React.createElement('div', { className: 'app-container' },
+                    React.createElement('div', { className: 'loading' },
+                        React.createElement('div', { className: 'spinner' }),
+                        React.createElement('span', null, 'Loading stocks...')
+                    )
+                );
+            }
+            
+            return React.createElement('div', { className: 'app-container' },
+                // Header
+                React.createElement('header', { className: 'header' },
+                    React.createElement('div', { className: 'header-content' },
+                        React.createElement('div', { className: 'logo' },
+                            React.createElement('i', { className: 'fas fa-chart-line' }),
+                            'TSX Stock Analyzer'
+                        )
+                    )
+                ),
+                
+                // Main Content
+                React.createElement('main', { className: 'main-content' },
+                    // Stats Grid
+                    React.createElement('div', { className: 'stats-grid' },
+                        React.createElement('div', { className: 'stat-card' },
+                            React.createElement('div', { className: 'stat-header' },
+                                React.createElement('i', { className: 'fas fa-building' }),
+                                React.createElement('span', null, 'Total Companies')
+                            ),
+                            React.createElement('div', { className: 'stat-value' }, stats.totalStocks),
+                            React.createElement('div', { className: 'stat-label' }, 'TSX Composite')
+                        ),
+                        React.createElement('div', { className: 'stat-card' },
+                            React.createElement('div', { className: 'stat-header' },
+                                React.createElement('i', { className: 'fas fa-star' }),
+                                React.createElement('span', null, 'Strong Buys')
+                            ),
+                            React.createElement('div', { className: 'stat-value' }, stats.strongBuys),
+                            React.createElement('div', { className: 'stat-label' }, 'High conviction picks')
+                        ),
+                        React.createElement('div', { className: 'stat-card' },
+                            React.createElement('div', { className: 'stat-header' },
+                                React.createElement('i', { className: 'fas fa-chart-bar' }),
+                                React.createElement('span', null, 'Average Score')
+                            ),
+                            React.createElement('div', { className: 'stat-value' }, `${stats.avgScore}/100`),
+                            React.createElement('div', { className: 'stat-label' }, 'Portfolio health')
+                        )
+                    ),
+                    
+                    // Stocks Container
+                    React.createElement('div', { className: 'stocks-container' },
+                        React.createElement('div', { className: 'stocks-header' },
+                            React.createElement('div', { className: 'stocks-title' },
+                                React.createElement('i', { className: 'fas fa-list' }),
+                                ` Stock Analysis (${stocks.length})`
+                            )
+                        ),
+                        
+                        // Stocks Grid
+                        React.createElement('div', { className: 'stocks-grid' },
+                            stocks.map(stock => 
+                                React.createElement('div', { key: stock.symbol, className: 'stock-card' },
+                                    React.createElement('div', { className: 'stock-header' },
+                                        React.createElement('div', { className: 'stock-info' },
+                                            React.createElement('h3', null, stock.name),
+                                            React.createElement('div', { className: 'symbol' }, stock.symbol),
+                                            React.createElement('div', { className: 'sector' }, stock.sector)
+                                        ),
+                                        React.createElement('div', { className: 'score-badge' }, stock.total_score || 'N/A')
+                                    ),
+                                    
+                                    React.createElement('div', { className: 'recommendation' }, stock.recommendation || 'No recommendation'),
+                                    
+                                    React.createElement('div', { className: 'price-info' },
+                                        React.createElement('div', null,
+                                            React.createElement('div', { className: 'current-price' }, 
+                                                stock.current_price ? formatCurrency(stock.current_price) : 'N/A'
+                                            ),
+                                            stock.target_price && React.createElement('div', null, `Target: ${formatCurrency(stock.target_price)}`)
+                                        ),
+                                        stock.upside_potential && React.createElement('div', { className: 'upside' },
+                                            `${formatPercentage(stock.upside_potential)} upside`
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        }
+        
+        // Render the app
+        ReactDOM.render(React.createElement(TSXAnalyzer), document.getElementById('root'));
+    </script>
+</body>
+</html>

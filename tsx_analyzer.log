@@ -1,0 +1,16 @@
+2025-09-04 17:28:00,553 - root - INFO - Ensured directory exists: logs
+2025-09-04 17:28:00,553 - root - INFO - Ensured directory exists: data
+2025-09-04 17:28:00,553 - root - INFO - Ensured directory exists: backups
+2025-09-04 17:28:00,553 - root - INFO - Ensured directory exists: temp
+2025-09-04 17:28:00,553 - root - INFO - ==================================================
+2025-09-04 17:28:00,553 - root - INFO - TSX Stock Analyzer starting up
+2025-09-04 17:28:00,554 - root - INFO - Environment: development
+2025-09-04 17:28:00,554 - root - INFO - Configuration: DevelopmentConfig
+2025-09-04 17:28:00,554 - root - INFO - Database: tsx_analyzer_dev.db
+2025-09-04 17:28:00,554 - root - INFO - Host: localhost:5000
+2025-09-04 17:28:00,554 - root - INFO - Rate limit delay: 1s
+2025-09-04 17:28:00,554 - root - INFO - TSX symbols to track: 65
+2025-09-04 17:28:00,554 - root - INFO - ==================================================
+2025-09-04 17:28:00,555 - database_manager - INFO - Database initialized successfully
+2025-09-04 17:28:00,562 - main_application - INFO - TSX Analyzer Application initialized
+2025-09-04 17:28:00,562 - main_application - INFO - Starting TSX Analyzer web server on http://localhost:5000

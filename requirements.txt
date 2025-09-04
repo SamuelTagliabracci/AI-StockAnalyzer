@@ -1,0 +1,12 @@
+# Core dependencies for TSX Stock Analyzer
+yfinance>=0.2.18
+pandas>=2.0.0
+numpy>=1.24.0
+flask>=2.3.0
+flask-cors>=4.0.0
+schedule>=1.2.0
+requests>=2.31.0
+
+# Optional for enhanced functionality
+plotly>=5.15.0
+gunicorn>=21.0.0

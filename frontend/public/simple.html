@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TSX Stock Analyzer - Simple View</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: #667eea;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .stock-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        .stock-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .stock-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .score {
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        .recommendation {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        .strong-buy { background: #d5f4e6; color: #27ae60; }
+        .buy { background: #fef9e7; color: #f39c12; }
+        .moderate-buy { background: #ebf3fd; color: #3498db; }
+        .hold { background: #f8f9fa; color: #6c757d; }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+        .metric {
+            text-align: center;
+            padding: 5px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .price-info {
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+            margin-top: 10px;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            background: #e8f5e8;
+            border-left: 4px solid #27ae60;
+            border-radius: 4px;
+        }
+        .update-time {
+            text-align: right;
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>TSX Stock Analyzer</h1>
+        <p>Live stock analysis updated every 5 seconds</p>
+    </div>
+
+    <div class="update-time" id="lastUpdate"></div>
+    
+    <div class="status" id="status">
+        <strong>Status:</strong> <span id="statusText">Loading...</span>
+    </div>
+
+    <div id="stockContainer">
+        <div class="loading">Loading stock data...</div>
+    </div>
+
+    <script>
+        let stocks = [];
+        
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('en-CA', {
+                style: 'currency',
+                currency: 'CAD'
+            }).format(value);
+        }
+        
+        function formatPercentage(value) {
+            return (value * 100).toFixed(1) + '%';
+        }
+        
+        function getRecommendationClass(rec) {
+            return rec.toLowerCase().replace(/\s+/g, '-');
+        }
+        
+        function createStockCard(stock) {
+            return `
+                <div class="stock-card">
+                    <div class="stock-header">
+                        <div>
+                            <h3>${stock.name}</h3>
+                            <div style="color: #667eea; font-weight: bold;">${stock.symbol}</div>
+                            <div style="color: #666; font-size: 12px;">${stock.sector}</div>
+                        </div>
+                        <div class="score">${stock.total_score}</div>
+                    </div>
+                    
+                    <div class="recommendation ${getRecommendationClass(stock.recommendation)}">
+                        ${stock.recommendation}
+                    </div>
+                    
+                    <div class="metrics">
+                        <div class="metric">
+                            <div><strong>${stock.fundamental_score}</strong></div>
+                            <div>Fundamental</div>
+                        </div>
+                        <div class="metric">
+                            <div><strong>${stock.technical_score}</strong></div>
+                            <div>Technical</div>
+                        </div>
+                        <div class="metric">
+                            <div><strong>${stock.momentum_score}</strong></div>
+                            <div>Momentum</div>
+                        </div>
+                        <div class="metric">
+                            <div><strong>${stock.risk_percentage}%</strong></div>
+                            <div>Risk</div>
+                        </div>
+                    </div>
+                    
+                    <div class="price-info">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-size: 18px; font-weight: bold;">${formatCurrency(stock.current_price)}</div>
+                                <div style="color: #27ae60; font-size: 12px;">Target: ${formatCurrency(stock.target_price)}</div>
+                            </div>
+                            <div style="color: ${stock.upside_potential >= 0 ? '#27ae60' : '#e74c3c'}; font-weight: bold;">
+                                ${formatPercentage(stock.upside_potential)} upside
+                            </div>
+                        </div>
+                        <div style="font-size: 11px; color: #666; margin-top: 5px;">
+                            Updated: ${new Date(stock.analysis_date).toLocaleTimeString()}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderStocks() {
+            const container = document.getElementById('stockContainer');
+            const statusText = document.getElementById('statusText');
+            const lastUpdate = document.getElementById('lastUpdate');
+            
+            if (stocks.length === 0) {
+                container.innerHTML = '<div class="loading">No stocks analyzed yet...</div>';
+                statusText.textContent = 'No data available';
+                return;
+            }
+            
+            // Sort by total score descending
+            const sortedStocks = stocks.sort((a, b) => b.total_score - a.total_score);
+            
+            container.innerHTML = `
+                <div class="stock-grid">
+                    ${sortedStocks.map(createStockCard).join('')}
+                </div>
+            `;
+            
+            statusText.textContent = `${stocks.length} stocks analyzed and updating every 5 seconds`;
+            lastUpdate.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+        }
+        
+        async function fetchStocks() {
+            try {
+                const response = await fetch('http://localhost:5000/api/stocks');
+                const data = await response.json();
+                stocks = data;
+                renderStocks();
+            } catch (error) {
+                console.error('Error fetching stocks:', error);
+                document.getElementById('statusText').textContent = 'Error loading data - Make sure Flask app is running on port 5000';
+            }
+        }
+        
+        // Initial load
+        fetchStocks();
+        
+        // Auto-refresh every 10 seconds
+        setInterval(fetchStocks, 10000);
+    </script>
+</body>
+</html>
