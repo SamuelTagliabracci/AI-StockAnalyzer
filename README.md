@@ -38,24 +38,36 @@ pip install -r requirements.txt
 
 ## Quick Start
 
-1. **Basic startup** (recommended for first run):
+1. **Start the application** (recommended):
 ```bash
-python run.py --initialize
+./start.sh
 ```
-This will initialize the database with TSX company data.
+This will start both the Flask API server and HTTP server for the web interface.
 
-2. **Start the web server**:
-```bash
-python run.py
-```
-
-3. **Access the application**:
-- Web Interface: http://localhost:5000
+2. **Access the application**:
+- Web Interface: http://localhost:8080/frontend/public/
+- Flask API: http://localhost:5000
 - API Endpoints: http://localhost:5000/api
 
 ## Usage Options
 
-### Command Line Arguments
+### Primary Method: Using start.sh
+
+The recommended way to run the application is with the start script:
+
+```bash
+./start.sh
+```
+
+This script will:
+- Activate the virtual environment
+- Start the Flask API on port 5000
+- Start the HTTP server on port 8080 for the web interface
+- Set up proper cleanup on exit
+
+### Alternative: Direct Python Execution
+
+For advanced users or development, you can run the Flask app directly:
 
 ```bash
 python run.py [OPTIONS]
@@ -73,17 +85,14 @@ python run.py [OPTIONS]
 ### Examples
 
 ```bash
-# Start with auto-update enabled
-python run.py --auto-update
-
-# Bind to all interfaces on port 8080
-python run.py --host 0.0.0.0 --port 8080
-
 # Check configuration
 python run.py --config-check
 
 # Debug mode with initialization
 python run.py --debug --initialize
+
+# Bind to all interfaces on port 8080
+python run.py --host 0.0.0.0 --port 8080
 ```
 
 ## API Endpoints

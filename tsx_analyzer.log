@@ -14,3 +14,99 @@
 2025-09-04 17:28:00,555 - database_manager - INFO - Database initialized successfully
 2025-09-04 17:28:00,562 - main_application - INFO - TSX Analyzer Application initialized
 2025-09-04 17:28:00,562 - main_application - INFO - Starting TSX Analyzer web server on http://localhost:5000
+2025-09-04 17:35:12,657 - root - INFO - Ensured directory exists: logs
+2025-09-04 17:35:12,657 - root - INFO - Ensured directory exists: data
+2025-09-04 17:35:12,657 - root - INFO - Ensured directory exists: backups
+2025-09-04 17:35:12,658 - root - INFO - Ensured directory exists: temp
+2025-09-04 17:35:12,658 - root - INFO - ==================================================
+2025-09-04 17:35:12,658 - root - INFO - TSX Stock Analyzer starting up
+2025-09-04 17:35:12,658 - root - INFO - Environment: development
+2025-09-04 17:35:12,658 - root - INFO - Configuration: DevelopmentConfig
+2025-09-04 17:35:12,658 - root - INFO - Database: tsx_analyzer_dev.db
+2025-09-04 17:35:12,658 - root - INFO - Host: localhost:5000
+2025-09-04 17:35:12,658 - root - INFO - Rate limit delay: 1s
+2025-09-04 17:35:12,658 - root - INFO - TSX symbols to track: 65
+2025-09-04 17:35:12,658 - root - INFO - ==================================================
+2025-09-04 17:35:12,659 - database_manager - INFO - Database initialized successfully
+2025-09-04 17:35:12,669 - main_application - INFO - TSX Analyzer Application initialized
+2025-09-04 17:35:12,669 - main_application - INFO - Starting TSX Analyzer web server on http://localhost:5000
+2025-09-04 17:40:02,175 - root - INFO - Ensured directory exists: logs
+2025-09-04 17:40:02,175 - root - INFO - Ensured directory exists: data
+2025-09-04 17:40:02,175 - root - INFO - Ensured directory exists: backups
+2025-09-04 17:40:02,175 - root - INFO - Ensured directory exists: temp
+2025-09-04 17:40:02,175 - root - INFO - ==================================================
+2025-09-04 17:40:02,176 - root - INFO - TSX Stock Analyzer starting up
+2025-09-04 17:40:02,176 - root - INFO - Environment: development
+2025-09-04 17:40:02,176 - root - INFO - Configuration: DevelopmentConfig
+2025-09-04 17:40:02,176 - root - INFO - Database: tsx_analyzer_dev.db
+2025-09-04 17:40:02,176 - root - INFO - Host: localhost:5000
+2025-09-04 17:40:02,176 - root - INFO - Rate limit delay: 1s
+2025-09-04 17:40:02,176 - root - INFO - TSX symbols to track: 65
+2025-09-04 17:40:02,176 - root - INFO - ==================================================
+2025-09-04 17:40:02,176 - database_manager - INFO - Database initialized successfully
+2025-09-04 17:40:02,184 - main_application - INFO - TSX Analyzer Application initialized
+2025-09-04 17:40:02,184 - main_application - INFO - Starting TSX Analyzer web server on http://localhost:5000
+2025-09-04 17:41:22,427 - root - INFO - Ensured directory exists: logs
+2025-09-04 17:41:22,427 - root - INFO - Ensured directory exists: data
+2025-09-04 17:41:22,427 - root - INFO - Ensured directory exists: backups
+2025-09-04 17:41:22,427 - root - INFO - Ensured directory exists: temp
+2025-09-04 17:41:22,427 - root - INFO - ==================================================
+2025-09-04 17:41:22,427 - root - INFO - TSX Stock Analyzer starting up
+2025-09-04 17:41:22,427 - root - INFO - Environment: development
+2025-09-04 17:41:22,427 - root - INFO - Configuration: DevelopmentConfig
+2025-09-04 17:41:22,427 - root - INFO - Database: tsx_analyzer_dev.db
+2025-09-04 17:41:22,427 - root - INFO - Host: localhost:5000
+2025-09-04 17:41:22,427 - root - INFO - Rate limit delay: 1s
+2025-09-04 17:41:22,427 - root - INFO - TSX symbols to track: 65
+2025-09-04 17:41:22,427 - root - INFO - ==================================================
+2025-09-04 17:41:22,428 - database_manager - INFO - Database initialized successfully
+2025-09-04 17:41:22,437 - main_application - INFO - TSX Analyzer Application initialized
+2025-09-04 17:41:22,437 - main_application - INFO - Starting TSX Analyzer web server on http://localhost:5000
+2025-09-04 17:43:30,257 - root - INFO - Ensured directory exists: logs
+2025-09-04 17:43:30,257 - root - INFO - Ensured directory exists: data
+2025-09-04 17:43:30,258 - root - INFO - Ensured directory exists: backups
+2025-09-04 17:43:30,258 - root - INFO - Ensured directory exists: temp
+2025-09-04 17:43:30,258 - root - INFO - ==================================================
+2025-09-04 17:43:30,258 - root - INFO - TSX Stock Analyzer starting up
+2025-09-04 17:43:30,258 - root - INFO - Environment: development
+2025-09-04 17:43:30,258 - root - INFO - Configuration: DevelopmentConfig
+2025-09-04 17:43:30,258 - root - INFO - Database: tsx_analyzer_dev.db
+2025-09-04 17:43:30,258 - root - INFO - Host: localhost:5000
+2025-09-04 17:43:30,258 - root - INFO - Rate limit delay: 1s
+2025-09-04 17:43:30,258 - root - INFO - TSX symbols to track: 65
+2025-09-04 17:43:30,258 - root - INFO - ==================================================
+2025-09-04 17:43:30,259 - database_manager - INFO - Database initialized successfully
+2025-09-04 17:43:30,266 - main_application - INFO - TSX Analyzer Application initialized
+2025-09-04 17:43:30,266 - main_application - INFO - Starting TSX Analyzer web server on http://localhost:5000
+2025-09-04 17:45:26,912 - root - INFO - Ensured directory exists: logs
+2025-09-04 17:45:26,912 - root - INFO - Ensured directory exists: data
+2025-09-04 17:45:26,913 - root - INFO - Ensured directory exists: backups
+2025-09-04 17:45:26,913 - root - INFO - Ensured directory exists: temp
+2025-09-04 17:45:26,913 - root - INFO - ==================================================
+2025-09-04 17:45:26,913 - root - INFO - TSX Stock Analyzer starting up
+2025-09-04 17:45:26,913 - root - INFO - Environment: development
+2025-09-04 17:45:26,913 - root - INFO - Configuration: DevelopmentConfig
+2025-09-04 17:45:26,913 - root - INFO - Database: tsx_analyzer_dev.db
+2025-09-04 17:45:26,913 - root - INFO - Host: localhost:5000
+2025-09-04 17:45:26,913 - root - INFO - Rate limit delay: 1s
+2025-09-04 17:45:26,913 - root - INFO - TSX symbols to track: 65
+2025-09-04 17:45:26,913 - root - INFO - ==================================================
+2025-09-04 17:45:26,914 - database_manager - INFO - Database initialized successfully
+2025-09-04 17:45:26,924 - main_application - INFO - TSX Analyzer Application initialized
+2025-09-04 17:45:26,924 - main_application - INFO - Starting TSX Analyzer web server on http://localhost:5000
+2025-09-04 17:47:56,602 - root - INFO - Ensured directory exists: logs
+2025-09-04 17:47:56,602 - root - INFO - Ensured directory exists: data
+2025-09-04 17:47:56,602 - root - INFO - Ensured directory exists: backups
+2025-09-04 17:47:56,602 - root - INFO - Ensured directory exists: temp
+2025-09-04 17:47:56,602 - root - INFO - ==================================================
+2025-09-04 17:47:56,602 - root - INFO - TSX Stock Analyzer starting up
+2025-09-04 17:47:56,603 - root - INFO - Environment: development
+2025-09-04 17:47:56,603 - root - INFO - Configuration: DevelopmentConfig
+2025-09-04 17:47:56,603 - root - INFO - Database: tsx_analyzer_dev.db
+2025-09-04 17:47:56,603 - root - INFO - Host: localhost:5000
+2025-09-04 17:47:56,603 - root - INFO - Rate limit delay: 1s
+2025-09-04 17:47:56,603 - root - INFO - TSX symbols to track: 65
+2025-09-04 17:47:56,603 - root - INFO - ==================================================
+2025-09-04 17:47:56,604 - database_manager - INFO - Database initialized successfully
+2025-09-04 17:47:56,612 - main_application - INFO - TSX Analyzer Application initialized
+2025-09-04 17:47:56,612 - main_application - INFO - Starting TSX Analyzer web server on http://localhost:5000

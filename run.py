@@ -102,8 +102,6 @@ def main():
             print("✅ Auto-update enabled (1 company every 5 seconds)")
         
         # Print access information
-        print(f"🌐 Web interface: http://{args.host}:{args.port}")
-        print(f"📊 API endpoint: http://{args.host}:{args.port}/api")
         print("📝 Press Ctrl+C to stop the server")
         print("=" * 50)
         
