@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.log
+
+# Node / web
+web/node_modules/
+web/dist/
+
+# Local env
+.env
+*.local
+
+# Keep the seeded market DB out of git (it's large + regenerable); ignore WAL sidecars
+backend/data/*.db
+backend/data/*.db-wal
+backend/data/*.db-shm
+
+# Upstream reference clones (each carries its own .git) — not part of this repo
+reference/
