@@ -21,16 +21,18 @@ export interface Candle {
 export interface AICall {
   action: Action
   confidence: number // 0..1
-  totalScore: number // 0..100
-  fundamentalScore: number
-  technicalScore: number
-  momentumScore: number
-  riskScore: number // 0..100 (higher = riskier)
+  // Quant sub-scores — present only for the Quant Engine; null for LLM agents.
+  totalScore: number | null // 0..100
+  fundamentalScore: number | null
+  technicalScore: number | null
+  momentumScore: number | null
+  riskScore: number | null // 0..100 (higher = riskier)
   currentPrice: number
   targetPrice: number
   upsidePct: number
-  // Which "agent" produced this call (Claude, a local Ollama model, etc.)
+  // Which "agent" produced this call (Quant Engine, Claude Code, an Ollama model, …)
   agent: string
+  horizon?: string | null // e.g. '12M' — the prediction window (LLM agents)
   rationale: string
 }
 
@@ -44,5 +46,7 @@ export interface Stock {
   changePct: number
   // Candles are fetched per-symbol on demand (see useCandles), not bundled in the list.
   candles?: Candle[]
-  call: AICall
+  call: AICall // the default/primary verdict (Quant Engine) — kept for back-compat
+  // The multi-agent ledger: every agent's latest verdict for this stock.
+  verdicts?: AICall[]
 }

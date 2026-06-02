@@ -79,11 +79,23 @@ self-improve and we can compare them honestly over a long horizon.
   (19 NASDAQ / 28 NYSE). NOTE: legacy TSX **prices** are still stale (end 2025-09-03) and TSX
   `exchange` codes are unset (labelled "TSX" via fallback) until a full refresh is run.
 
+- ✅ **R3 slice 1 — Multi-agent framework + Claude as the first real agent.** Added the
+  `agent_verdicts` ledger (one row per agent×symbol: action, confidence, target, **price_at_call +
+  horizon** → scoreable predictions for R5) with an idempotent migration. `/api/stocks` now returns
+  `verdicts[]` per stock (Quant Engine first, then any agents); `call` kept as back-compat default.
+  New `backend/agents/` package: `claude_analyst.py` builds the analyst input *bundle* (quant scores
+  + fundamentals + recent returns) and writes verdicts — **Claude Code is the model, no API key
+  needed**. Generated the first 10 real Claude verdicts (5 US + 5 TSX), deliberately diverging from
+  the quant where warranted (e.g. trimming TD's unrealistic C$149 target to C$115, flagging SHOP's
+  119× forward P/E). Frontend: `AICallPanel` gains an **agent switcher** (pills), hides the quant
+  sub-score breakdown for LLM agents, and shows the horizon; defaults to Claude when present.
+  Verified end-to-end through the Vite proxy.
+
 ### Next (priority order)
-- **R3 — Bring it to life with tiered AI agents:** wire the "AI Verdict" panel to real models.
-  Tiers: **Claude Code (me, scheduled)** = premium analyst; **Ollama Cloud** models;
-  **local models on the RTX 5090** via Ollama; external (DeepSeek/OpenAI) stubbed until keys.
-  Each agent reads the same quant scores + macro + news and emits a reasoned call.
+- **R3 slice 2 — More agent tiers:** Ollama Cloud + local RTX 5090 models (BLOCKED: NVIDIA driver
+  down — `nvidia-smi` fails; fix needed before local models run on GPU), external (DeepSeek/OpenAI)
+  stubbed until keys. Add a `POST` verdict-ingest endpoint so non-Claude agents can write. Make the
+  Claude analyst run on a **schedule** rather than manually.
 - **R4 — Paper ledger + daily analyst loop:** simulated portfolio per agent; daily cycle
   refresh→reason→execute→log predictions with price-at-time + horizon.
 - **R5 — Validation / backtest + leaderboard:** backtest on existing price history (don't wait

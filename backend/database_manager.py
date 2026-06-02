@@ -139,6 +139,27 @@ class DatabaseManager:
                 )
             ''')
             
+            # Agent verdicts — one row per (agent, symbol) recommendation. This is the
+            # multi-agent ledger: the quant engine, Claude Code, and (later) Ollama models
+            # each write their own reasoned call. price_at_call + horizon make every verdict
+            # a scoreable prediction (foundation for R5 validation).
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS agent_verdicts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    agent TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    action TEXT,
+                    confidence REAL,
+                    target_price REAL,
+                    price_at_call REAL,
+                    horizon TEXT,
+                    rationale TEXT,
+                    model TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (symbol) REFERENCES companies (symbol)
+                )
+            ''')
+
             # Migrations for pre-existing databases (seed DB predates multi-market):
             # add currency/exchange columns if absent, then backfill currency from the
             # symbol suffix so legacy TSX rows are tagged without a full re-ingest.
@@ -162,7 +183,8 @@ class DatabaseManager:
                 'CREATE INDEX IF NOT EXISTS idx_analysis_results_symbol_date ON analysis_results(symbol, analysis_date DESC)',
                 'CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector)',
                 'CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(is_active)',
-                'CREATE INDEX IF NOT EXISTS idx_ingestion_log_symbol ON ingestion_log(symbol, timestamp DESC)'
+                'CREATE INDEX IF NOT EXISTS idx_ingestion_log_symbol ON ingestion_log(symbol, timestamp DESC)',
+                'CREATE INDEX IF NOT EXISTS idx_agent_verdicts_symbol ON agent_verdicts(symbol, agent, created_at DESC)'
             ]
             
             for index in indexes:
@@ -497,7 +519,57 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting all analyses: {e}")
             return []
-    
+
+    # Agent verdict methods (multi-agent ledger)
+    def add_agent_verdict(self, verdict: Dict) -> bool:
+        """Insert one agent verdict (append-only history; latest wins on read)."""
+        try:
+            with self.get_connection() as conn:
+                conn.execute('''
+                    INSERT INTO agent_verdicts
+                    (agent, symbol, action, confidence, target_price, price_at_call,
+                     horizon, rationale, model, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    verdict['agent'],
+                    verdict['symbol'],
+                    verdict.get('action'),
+                    verdict.get('confidence'),
+                    verdict.get('target_price'),
+                    verdict.get('price_at_call'),
+                    verdict.get('horizon'),
+                    verdict.get('rationale'),
+                    verdict.get('model'),
+                    verdict.get('created_at') or datetime.now(),
+                ))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Error adding verdict {verdict.get('agent')}/{verdict.get('symbol')}: {e}")
+            return False
+
+    def get_all_latest_agent_verdicts(self) -> Dict[str, List[Dict]]:
+        """Latest verdict per (agent, symbol), grouped by symbol. One query for the whole list."""
+        try:
+            with self.get_connection() as conn:
+                query = '''
+                    SELECT v.* FROM agent_verdicts v
+                    JOIN (
+                        SELECT agent, symbol, MAX(created_at) AS mx
+                        FROM agent_verdicts GROUP BY agent, symbol
+                    ) latest
+                    ON v.agent = latest.agent AND v.symbol = latest.symbol
+                       AND v.created_at = latest.mx
+                '''
+                df = pd.read_sql(query, conn)
+                grouped: Dict[str, List[Dict]] = {}
+                for rec in df.to_dict('records'):
+                    grouped.setdefault(rec['symbol'], []).append(rec)
+                return grouped
+        except Exception as e:
+            logger.error(f"Error getting agent verdicts: {e}")
+            return {}
+
     # Utility methods
     def log_ingestion(self, symbol: str, data_type: str, start_date: Optional[str], 
                      end_date: Optional[str], records: int, success: bool, 

@@ -124,7 +124,34 @@ class MarketApp:
                 change_pct = round((price - prev) / prev * 100, 2)
         return price, change_pct
 
-    def _stock_payload(self, analysis: dict) -> dict:
+    @staticmethod
+    def _upside(current, target) -> float:
+        return round((target - current) / current * 100, 1) if (current and target) else 0.0
+
+    def _agent_verdict_payload(self, row: dict, current) -> dict:
+        """Map a stored agent_verdicts row to the AICall shape the frontend renders.
+
+        LLM/agent verdicts have no quant sub-scores, so those are null — the panel
+        hides the score breakdown for non-quant agents.
+        """
+        target = safe_float(row.get("target_price"))
+        return {
+            "action": row.get("action") or "HOLD",
+            "confidence": safe_float(row.get("confidence")) or 0.0,
+            "totalScore": None,
+            "fundamentalScore": None,
+            "technicalScore": None,
+            "momentumScore": None,
+            "riskScore": None,
+            "currentPrice": current,
+            "targetPrice": target,
+            "upsidePct": self._upside(current, target),
+            "agent": row.get("agent") or "Agent",
+            "horizon": row.get("horizon"),
+            "rationale": row.get("rationale") or "",
+        }
+
+    def _stock_payload(self, analysis: dict, agent_verdicts: list | None = None) -> dict:
         symbol = analysis["symbol"]
         price, change_pct = self._latest_price_change(symbol)
 
@@ -143,6 +170,25 @@ class MarketApp:
         else:
             upside = round((safe_float(analysis.get("upside_potential")) or 0) * 100, 1)
 
+        quant = {
+            "action": rec,
+            "confidence": confidence_for(total, risk),
+            "totalScore": total,
+            "fundamentalScore": fund,
+            "technicalScore": tech,
+            "momentumScore": mom,
+            "riskScore": risk,
+            "currentPrice": current,
+            "targetPrice": target,
+            "upsidePct": upside,
+            "agent": "Quant Engine",
+            "horizon": None,
+            "rationale": build_rationale(rec, total, fund, tech, mom, risk, current, target, upside),
+        }
+
+        # verdicts[] is the multi-agent ledger; quant first, then any stored agents.
+        verdicts = [quant] + [self._agent_verdict_payload(v, current) for v in (agent_verdicts or [])]
+
         return {
             "symbol": symbol,
             "name": analysis.get("name") or symbol,
@@ -151,20 +197,8 @@ class MarketApp:
             "exchange": exchange_label(analysis.get("exchange"), symbol),
             "price": current,
             "changePct": change_pct if change_pct is not None else 0.0,
-            "call": {
-                "action": rec,
-                "confidence": confidence_for(total, risk),
-                "totalScore": total,
-                "fundamentalScore": fund,
-                "technicalScore": tech,
-                "momentumScore": mom,
-                "riskScore": risk,
-                "currentPrice": current,
-                "targetPrice": target,
-                "upsidePct": upside,
-                "agent": "Quant Engine",
-                "rationale": build_rationale(rec, total, fund, tech, mom, risk, current, target, upside),
-            },
+            "call": quant,        # back-compat: the default/primary verdict
+            "verdicts": verdicts,
         }
 
     # ---- routes -----------------------------------------------------------
@@ -180,10 +214,11 @@ class MarketApp:
         def stocks():
             try:
                 analyses = self.db.get_all_latest_analyses()
+                verdicts_by_symbol = self.db.get_all_latest_agent_verdicts()  # one query for all
                 payload = []
                 for a in analyses:
                     try:
-                        payload.append(self._stock_payload(a))
+                        payload.append(self._stock_payload(a, verdicts_by_symbol.get(a["symbol"])))
                     except Exception as e:  # one bad symbol must not sink the list
                         logger.error("Skipping %s in /api/stocks: %s", a.get("symbol"), e)
                 payload.sort(key=lambda s: s["call"]["totalScore"], reverse=True)
@@ -226,7 +261,8 @@ class MarketApp:
                 comp = self.db.get_company(symbol) or {}
                 row = {**row, "name": comp.get("name"), "sector": comp.get("sector"),
                        "currency": comp.get("currency"), "exchange": comp.get("exchange")}
-                return jsonify({"success": True, "stock": self._stock_payload(row)})
+                verdicts = self.db.get_all_latest_agent_verdicts().get(symbol)
+                return jsonify({"success": True, "stock": self._stock_payload(row, verdicts)})
             except Exception as e:
                 logger.error("Error refreshing %s: %s", symbol, e)
                 return jsonify({"success": False, "error": str(e)}), 500

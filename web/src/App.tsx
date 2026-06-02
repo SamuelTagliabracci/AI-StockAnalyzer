@@ -60,7 +60,8 @@ function Terminal() {
           </div>
         </main>
 
-        <AICallPanel stock={stock} />
+        {/* key by symbol so the agent switcher resets to the default when you change stocks */}
+        <AICallPanel key={stock.symbol} stock={stock} />
       </div>
     </div>
   )
