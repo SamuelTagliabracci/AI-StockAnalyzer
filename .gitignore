@@ -19,3 +19,6 @@ backend/data/*.db-shm
 
 # Upstream reference clones (each carries its own .git) — not part of this repo
 reference/
+
+# Local Claude Code agent state
+.claude/

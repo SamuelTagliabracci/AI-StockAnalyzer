@@ -66,10 +66,20 @@ self-improve and we can compare them honestly over a long horizon.
   and currency tagging. Frontend now reads **only** real data via TanStack Query
   (`web/src/data/{api,hooks}.ts`); `mock.ts` deleted. Verified end-to-end through the Vite proxy.
 
+### Done (2026-06-02)
+- ✅ **R2 — Multi-market universe.** Universe expanded from TSX-only to **US + TSX**:
+  `Config.US_SYMBOLS` (47 NASDAQ/NYSE large caps) + `Config.UNIVERSE = US_SYMBOLS + TSX_SYMBOLS`
+  (112 symbols); ingestion iterates `UNIVERSE` (TSX-only naming retired). **Exchange/currency
+  are now data-driven**, tagged per-symbol from yfinance at ingest (`companies.currency`/`exchange`)
+  rather than guessed from the suffix — suffix logic remains only as a fallback. Added an
+  idempotent migration (new columns + CAD backfill for legacy TSX rows). API payload carries
+  `currency` + a friendly `exchange` label (NMS→NASDAQ, NYQ→NYSE, TOR→TSX); frontend `Stock`
+  type + watchlist show the exchange chip. Ingested + analyzed all 47 US names (prices fresh
+  through 2026-06-01); verified end-to-end: `/api/stocks` returns 65 CAD/TSX + 47 USD
+  (19 NASDAQ / 28 NYSE). NOTE: legacy TSX **prices** are still stale (end 2025-09-03) and TSX
+  `exchange` codes are unset (labelled "TSX" via fallback) until a full refresh is run.
+
 ### Next (priority order)
-- **R2 — Expand the universe to US / NASDAQ:** today it's TSX-only (`Config.TSX_SYMBOLS`).
-  Generalize to a multi-market universe (NASDAQ/NYSE large caps + TSX), drop TSX-only
-  assumptions, add exchange/currency tagging. Ingestion already supports any yfinance ticker.
 - **R3 — Bring it to life with tiered AI agents:** wire the "AI Verdict" panel to real models.
   Tiers: **Claude Code (me, scheduled)** = premium analyst; **Ollama Cloud** models;
   **local models on the RTX 5090** via Ollama; external (DeepSeek/OpenAI) stubbed until keys.

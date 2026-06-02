@@ -45,6 +45,8 @@ class DatabaseManager:
                     employees INTEGER,
                     description TEXT,
                     website TEXT,
+                    currency TEXT,
+                    exchange TEXT,
                     is_active BOOLEAN DEFAULT 1,
                     last_updated TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -137,6 +139,23 @@ class DatabaseManager:
                 )
             ''')
             
+            # Migrations for pre-existing databases (seed DB predates multi-market):
+            # add currency/exchange columns if absent, then backfill currency from the
+            # symbol suffix so legacy TSX rows are tagged without a full re-ingest.
+            existing_cols = {row[1] for row in cursor.execute("PRAGMA table_info(companies)")}
+            if 'currency' not in existing_cols:
+                cursor.execute("ALTER TABLE companies ADD COLUMN currency TEXT")
+            if 'exchange' not in existing_cols:
+                cursor.execute("ALTER TABLE companies ADD COLUMN exchange TEXT")
+            cursor.execute("""
+                UPDATE companies SET currency = 'CAD'
+                WHERE currency IS NULL AND (
+                    symbol LIKE '%.TO' OR symbol LIKE '%.V'
+                    OR symbol LIKE '%.CN' OR symbol LIKE '%.NE'
+                )
+            """)
+            cursor.execute("UPDATE companies SET currency = 'USD' WHERE currency IS NULL")
+
             # Create indexes for better performance
             indexes = [
                 'CREATE INDEX IF NOT EXISTS idx_daily_prices_symbol_date ON daily_prices(symbol, date DESC)',
@@ -159,9 +178,9 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    INSERT OR REPLACE INTO companies 
-                    (symbol, name, sector, industry, market_cap, employees, description, website, last_updated)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO companies
+                    (symbol, name, sector, industry, market_cap, employees, description, website, currency, exchange, last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     company_data['symbol'],
                     company_data.get('name', ''),
@@ -171,6 +190,8 @@ class DatabaseManager:
                     company_data.get('employees', 0),
                     company_data.get('description', ''),
                     company_data.get('website', ''),
+                    company_data.get('currency'),
+                    company_data.get('exchange'),
                     datetime.now()
                 ))
                 conn.commit()
@@ -437,7 +458,7 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn:
                 query = '''
-                    SELECT a.*, c.name, c.sector 
+                    SELECT a.*, c.name, c.sector, c.currency, c.exchange
                     FROM analysis_results a
                     JOIN companies c ON a.symbol = c.symbol
                     WHERE a.analysis_date = (

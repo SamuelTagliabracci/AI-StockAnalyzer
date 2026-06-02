@@ -1,6 +1,10 @@
 """
-Configuration file for TSX Stock Analyzer
+Configuration file for the multi-market Stock Analyzer
 Centralized configuration management
+
+The investable universe spans US large caps (NASDAQ/NYSE) and TSX (Toronto).
+Exchange/currency are tagged per-symbol from yfinance at ingest time, not guessed
+from suffixes — see DataIngestionManager.get_company_info.
 """
 
 import os
@@ -41,6 +45,68 @@ class Config:
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
     LOG_FILE = os.environ.get('LOG_FILE', 'tsx_analyzer.log')
     
+    # US large caps — NASDAQ / NYSE. yfinance tickers (no suffix → USD).
+    US_SYMBOLS = [
+        # Mega-cap technology
+        'AAPL',   # Apple
+        'MSFT',   # Microsoft
+        'NVDA',   # NVIDIA
+        'GOOGL',  # Alphabet (Class A)
+        'AMZN',   # Amazon
+        'META',   # Meta Platforms
+        'AVGO',   # Broadcom
+        'ORCL',   # Oracle
+        'ADBE',   # Adobe
+        'CRM',    # Salesforce
+        'AMD',    # Advanced Micro Devices
+        'INTC',   # Intel
+        'CSCO',   # Cisco
+        'QCOM',   # Qualcomm
+        'TXN',    # Texas Instruments
+
+        # Consumer & retail
+        'TSLA',   # Tesla
+        'HD',     # Home Depot
+        'NKE',    # Nike
+        'MCD',    # McDonald's
+        'SBUX',   # Starbucks
+        'COST',   # Costco
+        'WMT',    # Walmart
+        'PG',     # Procter & Gamble
+        'KO',     # Coca-Cola
+        'PEP',    # PepsiCo
+        'DIS',    # Walt Disney
+
+        # Financials
+        'JPM',    # JPMorgan Chase
+        'BAC',    # Bank of America
+        'V',      # Visa
+        'MA',     # Mastercard
+        'GS',     # Goldman Sachs
+        'MS',     # Morgan Stanley
+        'BRK-B',  # Berkshire Hathaway (Class B)
+
+        # Healthcare
+        'UNH',    # UnitedHealth
+        'JNJ',    # Johnson & Johnson
+        'LLY',    # Eli Lilly
+        'PFE',    # Pfizer
+        'ABBV',   # AbbVie
+        'MRK',    # Merck
+
+        # Energy & industrials
+        'XOM',    # Exxon Mobil
+        'CVX',    # Chevron
+        'BA',     # Boeing
+        'CAT',    # Caterpillar
+        'GE',     # GE Aerospace
+
+        # Communications
+        'NFLX',   # Netflix
+        'T',      # AT&T
+        'VZ',     # Verizon
+    ]
+
     # TSX Composite Index companies - Current valid symbols (2025)
     TSX_SYMBOLS = [
         # Financials - Big Banks & Insurance
@@ -132,7 +198,12 @@ class Config:
         'NFI.TO',   # NFI Group Inc.
         'KEY.TO',   # Keyera Corp.
     ]
-    
+
+    # The full investable universe ingestion + analysis run against.
+    # US first (larger, more liquid), then TSX. Note 'T' (AT&T, US) is distinct
+    # from 'T.TO' (TELUS, TSX) — the suffix keeps them unambiguous.
+    UNIVERSE = US_SYMBOLS + TSX_SYMBOLS
+
     # Scoring weights (must sum to 100)
     FUNDAMENTAL_WEIGHT = 40
     TECHNICAL_WEIGHT = 30

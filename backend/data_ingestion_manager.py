@@ -23,10 +23,11 @@ class DataIngestionManager:
         self.daily_limit_reached = False
         self.last_request_time = 0
         
-        # Import TSX symbols and settings from config
+        # Import the investable universe and settings from config
         try:
             from config import Config
-            self.TSX_SYMBOLS = Config.TSX_SYMBOLS
+            # Prefer the multi-market UNIVERSE; fall back to TSX-only for old configs.
+            self.universe = getattr(Config, 'UNIVERSE', None) or Config.TSX_SYMBOLS
             # Use config values or fallback to Config defaults
             if config:
                 self.rate_limit_delay = config.RATE_LIMIT_DELAY
@@ -37,10 +38,10 @@ class DataIngestionManager:
                 self.max_retries = Config.MAX_RETRIES
                 self.request_timeout = Config.REQUEST_TIMEOUT
         except ImportError:
-            # Fallback list if config import fails
-            self.TSX_SYMBOLS = [
-                'RY.TO', 'TD.TO', 'BNS.TO', 'BMO.TO', 'CM.TO', 'NA.TO',
-                'SHOP.TO', 'CSU.TO', 'OTEX.TO', 'LSPD.TO', 'CNQ.TO', 'SU.TO'
+            # Fallback list if config import fails (a small US + TSX mix)
+            self.universe = [
+                'AAPL', 'MSFT', 'NVDA', 'AMZN', 'JPM', 'XOM',
+                'RY.TO', 'TD.TO', 'SHOP.TO', 'CNQ.TO', 'ENB.TO', 'CSU.TO'
             ]
             self.rate_limit_delay = 1.0
             self.max_retries = 3
@@ -114,7 +115,11 @@ class DataIngestionManager:
                 'market_cap': info.get('marketCap', 0),
                 'employees': info.get('fullTimeEmployees', 0),
                 'description': info.get('longBusinessSummary', ''),
-                'website': info.get('website', '')
+                'website': info.get('website', ''),
+                # Multi-market tagging straight from the source (not suffix-guessed).
+                # yfinance returns ISO currency (USD/CAD) and an exchange code (NMS/NYQ/TOR…).
+                'currency': info.get('currency'),
+                'exchange': info.get('exchange'),
             }
             
             return company_data
@@ -305,17 +310,17 @@ class DataIngestionManager:
             logger.error(f"Error updating price data for {symbol}: {e}")
             return False
     
-    def initialize_tsx_companies(self) -> int:
-        """Initialize database with TSX composite companies"""
-        logger.info("Initializing TSX composite companies...")
+    def initialize_universe(self) -> int:
+        """Initialize database with the full investable universe (US + TSX)"""
+        logger.info("Initializing investable universe...")
         successful_updates = 0
-        
-        for i, symbol in enumerate(self.TSX_SYMBOLS):
+
+        for i, symbol in enumerate(self.universe):
             if self.daily_limit_reached:
                 logger.warning("Daily limit reached, stopping initialization")
                 break
-            
-            logger.info(f"Initializing {symbol} ({i+1}/{len(self.TSX_SYMBOLS)})")
+
+            logger.info(f"Initializing {symbol} ({i+1}/{len(self.universe)})")
             
             # Check if company already exists
             existing_company = self.db.get_company(symbol)
@@ -334,8 +339,11 @@ class DataIngestionManager:
             # Small delay between companies
             time.sleep(0.5)
         
-        logger.info(f"Initialized {successful_updates}/{len(self.TSX_SYMBOLS)} companies")
+        logger.info(f"Initialized {successful_updates}/{len(self.universe)} companies")
         return successful_updates
+
+    # Backwards-compatible alias (old callers / scripts).
+    initialize_tsx_companies = initialize_universe
     
     def update_all_price_data(self, max_companies: int = None) -> Dict[str, int]:
         """Update price data for all companies"""
@@ -436,7 +444,7 @@ class DataIngestionManager:
         return {
             'daily_limit_reached': self.daily_limit_reached,
             'current_rate_limit_delay': self.rate_limit_delay,
-            'total_companies': len(self.TSX_SYMBOLS),
+            'total_companies': len(self.universe),
             'companies_in_db': len(self.db.get_all_companies()),
             'last_limit_reset': self.db.get_system_setting('last_limit_reset'),
             'database_stats': self.db.get_database_stats()

@@ -39,6 +39,7 @@ export interface Stock {
   name: string
   sector: string
   currency: string
+  exchange: string // e.g. 'NASDAQ', 'NYSE', 'TSX'
   price: number
   changePct: number
   // Candles are fetched per-symbol on demand (see useCandles), not bundled in the list.

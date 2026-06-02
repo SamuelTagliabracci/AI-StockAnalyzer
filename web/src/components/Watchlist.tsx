@@ -26,7 +26,10 @@ export function Watchlist({ stocks, selected, onSelect }: Props) {
               style={{ borderColor: 'var(--border)' }}
             >
               <div className="min-w-0">
-                <div className="mono text-[13px]" style={{ color: 'var(--text-bright)' }}>{s.symbol}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="mono text-[13px]" style={{ color: 'var(--text-bright)' }}>{s.symbol}</span>
+                  <span className="tag text-[8px] px-1 py-0 shrink-0" title={`${s.exchange} · ${s.currency}`}>{s.exchange}</span>
+                </div>
                 <div className="text-[10px] truncate dim">{s.name}</div>
               </div>
               <div className="text-right shrink-0">

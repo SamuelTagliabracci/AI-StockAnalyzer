@@ -35,12 +35,32 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get("MARKET_DB", os.path.join(os.path.dirname(__file__), "data", "market.db"))
 
-# Canadian exchange suffixes (yfinance) → CAD; everything else we treat as USD for now.
+# Canadian exchange suffixes (yfinance) → CAD; everything else we treat as USD.
+# This is only a FALLBACK now — currency/exchange are tagged per-symbol at ingest
+# time from yfinance (companies.currency / companies.exchange). See R2.
 _CAD_SUFFIXES = (".TO", ".V", ".CN", ".NE")
+
+# yfinance exchange codes → human labels for the terminal.
+_EXCHANGE_LABELS = {
+    "NMS": "NASDAQ", "NGM": "NASDAQ", "NCM": "NASDAQ", "NaN": "NASDAQ",
+    "NYQ": "NYSE", "PCX": "NYSE Arca", "ASE": "NYSE American",
+    "TOR": "TSX", "VAN": "TSXV", "CNQ": "CSE", "NEO": "NEO",
+}
 
 
 def currency_for(symbol: str) -> str:
     return "CAD" if symbol.upper().endswith(_CAD_SUFFIXES) else "USD"
+
+
+def exchange_label(code, symbol: str) -> str:
+    """Friendly exchange name from a yfinance code, falling back to a suffix guess.
+
+    `code` may arrive as NaN (a float) when it comes from a pandas-read NULL column,
+    so only trust a non-empty string.
+    """
+    if isinstance(code, str) and code:
+        return _EXCHANGE_LABELS.get(code, code)
+    return "TSX" if symbol.upper().endswith(_CAD_SUFFIXES) else "US"
 
 
 def safe_float(x):
@@ -127,7 +147,8 @@ class MarketApp:
             "symbol": symbol,
             "name": analysis.get("name") or symbol,
             "sector": analysis.get("sector") or "Unknown",
-            "currency": currency_for(symbol),
+            "currency": (analysis.get("currency") if isinstance(analysis.get("currency"), str) else None) or currency_for(symbol),
+            "exchange": exchange_label(analysis.get("exchange"), symbol),
             "price": current,
             "changePct": change_pct if change_pct is not None else 0.0,
             "call": {
@@ -203,7 +224,8 @@ class MarketApp:
                     return jsonify({"success": False, "message": f"No data for {symbol}"}), 400
                 row = self.db.get_latest_analysis(symbol) or {"symbol": symbol}
                 comp = self.db.get_company(symbol) or {}
-                row = {**row, "name": comp.get("name"), "sector": comp.get("sector")}
+                row = {**row, "name": comp.get("name"), "sector": comp.get("sector"),
+                       "currency": comp.get("currency"), "exchange": comp.get("exchange")}
                 return jsonify({"success": True, "stock": self._stock_payload(row)})
             except Exception as e:
                 logger.error("Error refreshing %s: %s", symbol, e)
