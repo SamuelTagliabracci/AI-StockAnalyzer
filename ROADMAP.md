@@ -22,7 +22,7 @@ Ollama **Cloud** models · Ollama **local** models (RTX 5090) · later, custom *
 
 ---
 
-## Where we are today (2026-06-02)
+## Where we are today (2026-06-15)
 
 **Done — Phase 1 (Foundation):**
 - ✅ **R1** — Real backend (Flask + SQLite) + React terminal UI, real data only.
@@ -32,11 +32,26 @@ Ollama **Cloud** models · Ollama **local** models (RTX 5090) · later, custom *
   10 starter Claude verdicts, agent-switcher in the UI. Each verdict already stores
   **price_at_call + horizon** → predictions are scoreable from day one.
 
+**Done — since 2026-06-02 (build-out across Phases 2 & 3):**
+- ✅ **R3 slice 2 — Ollama analyst** (`backend/agents/ollama_analyst.py`): second real agent
+  (qwen/llama via `localhost:11434`), GPU now unblocked. Two live agents competing.
+- ✅ **Stock Detail + Market views** (`StockDetail.tsx`, `MarketView.tsx`): click-through
+  per-stock page with agent calls — partial Phase 2.2.
+- ✅ **Paper trading engine** (`backend/trading/`: engine, seed, autonomous trader loop):
+  per-agent accounts/cash/holdings/trades tables, `/api/accounts*` endpoints, autonomous
+  AI trader ($10k, 3×/day). UI: `Portfolio.tsx`, `AccountPortfolio.tsx`, `AITraders.tsx`,
+  `TradeTicket.tsx` — partial Phase 3.1.
+- ✅ **Smart Money feed** (`backend/signals/`, `market_signals` table, `/api/signals`,
+  `SmartMoney.tsx`): SEC Form 4 insider trades LIVE; congress/institution/copytrade stubbed.
+- ✅ **Fear & Greed Index** (`backend/market_sentiment.py`, `/api/fear-greed`,
+  `FearGreedGauge.tsx`): CNN market-wide sentiment gauge on the Market view.
+- ✅ **Data backfill** (`backend/backfill.py`): all prices refreshed to 2026-06-11;
+  MEG.TO delisted. (Resolved the stale-TSX-prices blocker below.)
+
 **Known blockers / prerequisites:**
-- ⚠️ **NVIDIA driver down** on this laptop (`nvidia-smi` fails) → local Ollama (RTX 5090) tier
-  can't use the GPU yet. *(User is fixing this.)* Ollama installed (v0.30.0); server not running.
+- ✅ ~~NVIDIA driver down~~ — resolved; GPU unblocked, Ollama serving the local tier.
 - 🔑 **No API keys** for OpenAI / Gemini / Grok / DeepSeek → those tiers are stubbed until keys exist.
-- 📅 Legacy **TSX prices stale** (end 2025-09-03); US data fresh. Batch-refresh when convenient.
+- ✅ ~~Legacy TSX prices stale~~ — resolved via `backfill.py` (fresh to 2026-06-11).
 
 ---
 
