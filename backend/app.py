@@ -14,10 +14,12 @@ Fixes over the reference version (R1):
 Plus: /api/candles/<symbol> for the chart, and currency tagging per symbol.
 """
 
+import json
 import logging
 import math
 import os
 import threading
+import time
 from datetime import datetime
 
 from flask import Flask, jsonify, request
@@ -26,6 +28,12 @@ from flask_cors import CORS
 from database_manager import DatabaseManager
 from data_ingestion_manager import DataIngestionManager
 from stock_analyzer import StockAnalyzer
+from market_sentiment import fetch_fear_greed
+from trading.engine import execute_order, value_portfolio
+
+# CNN Fear & Greed updates a few times an hour at most; cache live fetches in-process.
+_FG_TTL = 600  # seconds
+_fg_cache: dict = {"at": 0.0, "payload": None}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -111,22 +119,42 @@ class MarketApp:
 
     # ---- payload builders -------------------------------------------------
 
-    def _latest_price_change(self, symbol):
-        """(price, change_pct) from the two most recent closes; (None, None) if unavailable."""
-        df = self.db.get_price_data(symbol, days=2)
+    def _price_snapshot(self, symbol):
+        """Latest price/change plus volume and relative-volume from ~21 days of closes.
+
+        rel_volume = latest volume ÷ avg of the prior 20 days — >1.5 flags 'unusual'
+        activity, which the watchlist uses for its Volume/Trending sorts. One query.
+        """
+        df = self.db.get_price_data(symbol, days=21)
         if df is None or df.empty:
-            return None, None
+            return {"price": None, "change_pct": None, "volume": None, "rel_volume": None}
         price = safe_float(df.iloc[-1]["close"])
         change_pct = None
         if len(df) > 1:
             prev = safe_float(df.iloc[-2]["close"])
             if price is not None and prev:
                 change_pct = round((price - prev) / prev * 100, 2)
-        return price, change_pct
+        volume = safe_float(df.iloc[-1].get("volume"))
+        rel_volume = None
+        if len(df) > 1 and volume:
+            prior = [safe_float(v) for v in df.iloc[:-1]["volume"].tolist()]
+            prior = [v for v in prior if v]
+            if prior:
+                avg = sum(prior) / len(prior)
+                if avg:
+                    rel_volume = round(volume / avg, 2)
+        return {"price": price, "change_pct": change_pct, "volume": volume, "rel_volume": rel_volume}
 
     @staticmethod
     def _upside(current, target) -> float:
         return round((target - current) / current * 100, 1) if (current and target) else 0.0
+
+    def _holding_currency(self, symbol: str):
+        """(None, currency) for a symbol — currency from company info, suffix as fallback."""
+        comp = self.db.get_company(symbol) or {}
+        currency = comp.get("currency") or (
+            "CAD" if symbol.upper().endswith((".TO", ".V", ".CN", ".NE")) else "USD")
+        return None, currency
 
     def _agent_verdict_payload(self, row: dict, current) -> dict:
         """Map a stored agent_verdicts row to the AICall shape the frontend renders.
@@ -153,7 +181,8 @@ class MarketApp:
 
     def _stock_payload(self, analysis: dict, agent_verdicts: list | None = None) -> dict:
         symbol = analysis["symbol"]
-        price, change_pct = self._latest_price_change(symbol)
+        snap = self._price_snapshot(symbol)
+        price, change_pct = snap["price"], snap["change_pct"]
 
         total = safe_int(analysis.get("total_score")) or 0
         fund = safe_int(analysis.get("fundamental_score")) or 0
@@ -197,6 +226,8 @@ class MarketApp:
             "exchange": exchange_label(analysis.get("exchange"), symbol),
             "price": current,
             "changePct": change_pct if change_pct is not None else 0.0,
+            "volume": snap["volume"],
+            "relVolume": snap["rel_volume"],   # latest vs 20d avg; >1.5 ≈ unusual
             "call": quant,        # back-compat: the default/primary verdict
             "verdicts": verdicts,
         }
@@ -266,6 +297,157 @@ class MarketApp:
             except Exception as e:
                 logger.error("Error refreshing %s: %s", symbol, e)
                 return jsonify({"success": False, "error": str(e)}), 500
+
+        @app.route("/api/news/<symbol>")
+        def news(symbol):
+            """Recent news + announcements for one symbol (Yahoo Finance, 10-min cached)."""
+            try:
+                limit = request.args.get("limit", default=20, type=int)
+                items = self.ingestion.get_company_news(symbol, limit=limit)
+                return jsonify({"symbol": symbol, "news": items, "total": len(items)})
+            except Exception as e:
+                logger.error("Error in /api/news/%s: %s", symbol, e)
+                return jsonify({"symbol": symbol, "news": [], "error": str(e)})
+
+        @app.route("/api/accounts")
+        def accounts():
+            """All trading accounts with a quick valuation (for the AI Traders leaderboard)."""
+            try:
+                out = []
+                for a in self.db.list_accounts():
+                    v = value_portfolio(self.db, a["id"])
+                    out.append({
+                        "id": a["id"], "type": a["type"], "displayName": a["display_name"],
+                        "email": a.get("email"), "agentKey": a.get("agent_key"),
+                        "totalUsdEquiv": v["totalUsdEquiv"], "unrealizedPnl": v["unrealizedPnl"],
+                        "unrealizedPnlPct": v["unrealizedPnlPct"], "positions": len(v["positions"]),
+                    })
+                return jsonify({"accounts": out})
+            except Exception as e:
+                logger.error("Error in /api/accounts: %s", e)
+                return jsonify({"error": str(e)}), 500
+
+        @app.route("/api/accounts/<int:account_id>/portfolio")
+        def portfolio(account_id):
+            try:
+                acct = self.db.get_account(account_id)
+                if not acct:
+                    return jsonify({"error": "no such account"}), 404
+                v = value_portfolio(self.db, account_id)
+                v["account"] = {"id": acct["id"], "type": acct["type"],
+                                "displayName": acct["display_name"], "agentKey": acct.get("agent_key")}
+                return jsonify(v)
+            except Exception as e:
+                logger.error("Error in /api/accounts/%s/portfolio: %s", account_id, e)
+                return jsonify({"error": str(e)}), 500
+
+        @app.route("/api/accounts/<int:account_id>/trades")
+        def account_trades(account_id):
+            try:
+                limit = request.args.get("limit", default=100, type=int)
+                rows = self.db.get_trades(account_id, limit=limit)
+                return jsonify({"trades": [{
+                    "symbol": r["symbol"], "side": r["side"], "shares": safe_float(r["shares"]),
+                    "price": safe_float(r["price"]), "currency": r.get("currency"),
+                    "kind": r.get("kind"), "rationale": r.get("rationale"),
+                    "createdAt": str(r.get("created_at")),
+                } for r in rows]})
+            except Exception as e:
+                logger.error("Error in /api/accounts/%s/trades: %s", account_id, e)
+                return jsonify({"error": str(e)}), 500
+
+        @app.route("/api/accounts/<int:account_id>/orders", methods=["POST"])
+        def place_order(account_id):
+            """Manual order for a human account (paper). Body: {symbol, side, shares}."""
+            try:
+                body = request.get_json(force=True) or {}
+                res = execute_order(self.db, account_id, body.get("symbol", ""),
+                                    body.get("side", ""), body.get("shares", 0),
+                                    kind="paper", rationale="manual")
+                return jsonify(res), (200 if res.get("ok") else 400)
+            except Exception as e:
+                logger.error("Error in place_order %s: %s", account_id, e)
+                return jsonify({"ok": False, "message": str(e)}), 500
+
+        @app.route("/api/accounts/<int:account_id>/cash", methods=["POST"])
+        def set_cash(account_id):
+            """Manual cash entry. Body: {currency, amount} (absolute set)."""
+            try:
+                body = request.get_json(force=True) or {}
+                ok = self.db.set_cash(account_id, body["currency"].upper(), float(body["amount"]))
+                return jsonify({"ok": ok, "cash": self.db.get_cash(account_id)})
+            except Exception as e:
+                logger.error("Error set_cash %s: %s", account_id, e)
+                return jsonify({"ok": False, "message": str(e)}), 400
+
+        @app.route("/api/accounts/<int:account_id>/holdings", methods=["POST"])
+        def set_holding(account_id):
+            """Manually set an existing position (no cash impact). Body: {symbol, shares, avgCost}."""
+            try:
+                body = request.get_json(force=True) or {}
+                symbol = body["symbol"].upper()
+                _, currency = self._holding_currency(symbol)
+                ok = self.db.upsert_holding(account_id, symbol, float(body["shares"]),
+                                            float(body.get("avgCost") or 0), currency)
+                return jsonify({"ok": ok})
+            except Exception as e:
+                logger.error("Error set_holding %s: %s", account_id, e)
+                return jsonify({"ok": False, "message": str(e)}), 400
+
+        @app.route("/api/signals")
+        def signals():
+            """Smart-money feed: recent disclosed trades by insiders/institutions/etc.
+
+            Query params: ?symbol=AAPL (repeatable), ?source=insider, ?limit=200.
+            """
+            try:
+                syms = request.args.getlist("symbol") or None
+                source = request.args.get("source") or None
+                limit = request.args.get("limit", default=200, type=int)
+                rows = self.db.get_market_signals(symbols=syms, source=source, limit=limit)
+                return jsonify({"signals": [self._signal_payload(r) for r in rows],
+                                "total": len(rows)})
+            except Exception as e:
+                logger.error("Error in /api/signals: %s", e)
+                return jsonify({"error": str(e)}), 500
+
+        @app.route("/api/fear-greed")
+        def fear_greed():
+            """CNN Fear & Greed Index (market-wide sentiment, 0-100) + sub-indicators.
+
+            Live fetch is cached in-process for 10 min; the last good reading is also
+            persisted to system_settings so we can still serve a value if CNN is down.
+            """
+            now = time.monotonic()
+            if _fg_cache["payload"] and now - _fg_cache["at"] < _FG_TTL:
+                return jsonify({**_fg_cache["payload"], "stale": False})
+            try:
+                payload = fetch_fear_greed()
+                _fg_cache.update(at=now, payload=payload)
+                self.db.set_system_setting("fear_greed", json.dumps(payload))
+                return jsonify({**payload, "stale": False})
+            except Exception as e:
+                logger.error("Error in /api/fear-greed: %s", e)
+                cached = self.db.get_system_setting("fear_greed")
+                if cached:
+                    return jsonify({**json.loads(cached), "stale": True})
+                return jsonify({"error": str(e)}), 502
+
+    def _signal_payload(self, r: dict) -> dict:
+        """Map a market_signals row to the camelCase shape the frontend feed renders."""
+        return {
+            "source": r.get("source"),
+            "symbol": r.get("symbol"),
+            "actor": r.get("actor"),
+            "actorRole": r.get("actor_role"),
+            "action": r.get("action"),
+            "shares": safe_float(r.get("shares")),
+            "valueUsd": safe_float(r.get("value_usd")),
+            "price": safe_float(r.get("price")),
+            "tradedAt": r.get("traded_at"),
+            "filedAt": r.get("filed_at"),
+            "url": r.get("url"),
+        }
 
     def run(self, host="0.0.0.0", port=5000, debug=False):
         logger.info("Serving on http://%s:%s", host, port)

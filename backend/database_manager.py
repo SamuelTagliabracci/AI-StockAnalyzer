@@ -160,6 +160,89 @@ class DatabaseManager:
                 )
             ''')
 
+            # "Smart money" feed: real disclosed trades by insiders, institutions (13F),
+            # politicians (STOCK Act), and copy-trade leaders — one row per disclosed trade.
+            # source = insider | institution | congress | copytrade. action = BUY | SELL.
+            # traded_at is when the trade happened; filed_at is when it became public.
+            # (external_id, source) is unique so re-ingesting the same filing is idempotent.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS market_signals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    actor TEXT,
+                    actor_role TEXT,
+                    action TEXT,
+                    shares REAL,
+                    value_usd REAL,
+                    price REAL,
+                    traded_at TEXT,
+                    filed_at TEXT,
+                    url TEXT,
+                    external_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (source, external_id),
+                    FOREIGN KEY (symbol) REFERENCES companies (symbol)
+                )
+            ''')
+
+            # --- Phase 3: paper/real trading -----------------------------------------
+            # accounts: one per trader. type 'human' (Sam) or 'agent' (an AI). For agents,
+            # agent_key matches the name in agent_verdicts (e.g. 'Qwen2.5 7B') so the loop
+            # can find that agent's calls.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS accounts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT,
+                    type TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    agent_key TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (type, display_name)
+                )
+            ''')
+            # cash_balances: per-account wallet, one row per currency (CAD/USD).
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS cash_balances (
+                    account_id INTEGER NOT NULL,
+                    currency TEXT NOT NULL,
+                    amount REAL NOT NULL DEFAULT 0,
+                    PRIMARY KEY (account_id, currency),
+                    FOREIGN KEY (account_id) REFERENCES accounts (id)
+                )
+            ''')
+            # holdings: current positions (one row per account+symbol; avg_cost in the
+            # stock's own currency). Removed when shares hit 0.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS holdings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_id INTEGER NOT NULL,
+                    symbol TEXT NOT NULL,
+                    shares REAL NOT NULL,
+                    avg_cost REAL NOT NULL,
+                    currency TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (account_id, symbol),
+                    FOREIGN KEY (account_id) REFERENCES accounts (id)
+                )
+            ''')
+            # trades: append-only fill ledger. side BUY/SELL, kind paper/real.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS trades (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_id INTEGER NOT NULL,
+                    symbol TEXT NOT NULL,
+                    side TEXT NOT NULL,
+                    shares REAL NOT NULL,
+                    price REAL NOT NULL,
+                    currency TEXT,
+                    kind TEXT NOT NULL DEFAULT 'paper',
+                    rationale TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (account_id) REFERENCES accounts (id)
+                )
+            ''')
+
             # Migrations for pre-existing databases (seed DB predates multi-market):
             # add currency/exchange columns if absent, then backfill currency from the
             # symbol suffix so legacy TSX rows are tagged without a full re-ingest.
@@ -184,7 +267,11 @@ class DatabaseManager:
                 'CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector)',
                 'CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(is_active)',
                 'CREATE INDEX IF NOT EXISTS idx_ingestion_log_symbol ON ingestion_log(symbol, timestamp DESC)',
-                'CREATE INDEX IF NOT EXISTS idx_agent_verdicts_symbol ON agent_verdicts(symbol, agent, created_at DESC)'
+                'CREATE INDEX IF NOT EXISTS idx_agent_verdicts_symbol ON agent_verdicts(symbol, agent, created_at DESC)',
+                'CREATE INDEX IF NOT EXISTS idx_market_signals_symbol ON market_signals(symbol, filed_at DESC)',
+                'CREATE INDEX IF NOT EXISTS idx_market_signals_filed ON market_signals(filed_at DESC)',
+                'CREATE INDEX IF NOT EXISTS idx_holdings_account ON holdings(account_id)',
+                'CREATE INDEX IF NOT EXISTS idx_trades_account ON trades(account_id, created_at DESC)'
             ]
             
             for index in indexes:
@@ -570,8 +657,209 @@ class DatabaseManager:
             logger.error(f"Error getting agent verdicts: {e}")
             return {}
 
+    def add_market_signal(self, sig: Dict) -> bool:
+        """Insert one smart-money signal; idempotent on (source, external_id).
+
+        Returns True only when a NEW row was inserted (False on duplicate) so callers
+        can report accurate counts across repeated ingests.
+        """
+        try:
+            with self.get_connection() as conn:
+                cur = conn.execute('''
+                    INSERT OR IGNORE INTO market_signals
+                    (source, symbol, actor, actor_role, action, shares, value_usd,
+                     price, traded_at, filed_at, url, external_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    sig['source'], sig['symbol'], sig.get('actor'), sig.get('actor_role'),
+                    sig.get('action'), sig.get('shares'), sig.get('value_usd'),
+                    sig.get('price'), sig.get('traded_at'), sig.get('filed_at'),
+                    sig.get('url'), sig.get('external_id'),
+                ))
+                conn.commit()
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error adding signal {sig.get('source')}/{sig.get('symbol')}: {e}")
+            return False
+
+    def get_market_signals(self, symbols: Optional[List[str]] = None,
+                           source: Optional[str] = None, limit: int = 200) -> List[Dict]:
+        """Recent smart-money signals, newest filing first. Optional symbol/source filters."""
+        try:
+            with self.get_connection() as conn:
+                clauses, params = [], []
+                if symbols:
+                    clauses.append(f"symbol IN ({','.join('?' * len(symbols))})")
+                    params.extend(symbols)
+                if source:
+                    clauses.append("source = ?")
+                    params.append(source)
+                where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+                params.append(limit)
+                query = (f"SELECT * FROM market_signals{where} "
+                         f"ORDER BY filed_at DESC, id DESC LIMIT ?")
+                df = pd.read_sql(query, conn, params=params)
+                return df.to_dict('records')
+        except Exception as e:
+            logger.error(f"Error getting market signals: {e}")
+            return []
+
+    # --- Phase 3: accounts / trading ------------------------------------------
+    @staticmethod
+    def _clean(records: List[Dict]) -> List[Dict]:
+        """SQL NULLs come back from pandas as NaN floats — invalid JSON; coerce to None."""
+        for r in records:
+            for k, v in r.items():
+                if isinstance(v, float) and pd.isna(v):
+                    r[k] = None
+        return records
+
+    def get_or_create_account(self, type: str, display_name: str,
+                              email: Optional[str] = None,
+                              agent_key: Optional[str] = None) -> Optional[Dict]:
+        """Idempotently get (or create) an account, keyed by (type, display_name)."""
+        try:
+            with self.get_connection() as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO accounts (email, type, display_name, agent_key) "
+                    "VALUES (?, ?, ?, ?)", (email, type, display_name, agent_key))
+                conn.commit()
+                df = pd.read_sql(
+                    "SELECT * FROM accounts WHERE type=? AND display_name=?",
+                    conn, params=[type, display_name])
+                return self._clean(df.to_dict('records'))[0] if not df.empty else None
+        except Exception as e:
+            logger.error(f"Error get_or_create_account {display_name}: {e}")
+            return None
+
+    def list_accounts(self) -> List[Dict]:
+        try:
+            with self.get_connection() as conn:
+                return self._clean(pd.read_sql("SELECT * FROM accounts ORDER BY type, id", conn).to_dict('records'))
+        except Exception as e:
+            logger.error(f"Error list_accounts: {e}")
+            return []
+
+    def get_account(self, account_id: int) -> Optional[Dict]:
+        try:
+            with self.get_connection() as conn:
+                df = pd.read_sql("SELECT * FROM accounts WHERE id=?", conn, params=[account_id])
+                return self._clean(df.to_dict('records'))[0] if not df.empty else None
+        except Exception as e:
+            logger.error(f"Error get_account {account_id}: {e}")
+            return None
+
+    def get_cash(self, account_id: int) -> Dict[str, float]:
+        """Return {currency: amount} for an account's wallets."""
+        try:
+            with self.get_connection() as conn:
+                df = pd.read_sql("SELECT currency, amount FROM cash_balances WHERE account_id=?",
+                                 conn, params=[account_id])
+                return {r['currency']: float(r['amount']) for r in df.to_dict('records')}
+        except Exception as e:
+            logger.error(f"Error get_cash {account_id}: {e}")
+            return {}
+
+    def set_cash(self, account_id: int, currency: str, amount: float) -> bool:
+        """Set a wallet to an absolute amount (used by manual entry + seeding)."""
+        try:
+            with self.get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO cash_balances (account_id, currency, amount) VALUES (?, ?, ?) "
+                    "ON CONFLICT(account_id, currency) DO UPDATE SET amount=excluded.amount",
+                    (account_id, currency, float(amount)))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Error set_cash {account_id}/{currency}: {e}")
+            return False
+
+    def adjust_cash(self, account_id: int, currency: str, delta: float) -> bool:
+        """Add delta (can be negative) to a wallet, creating it at 0 first if needed."""
+        try:
+            with self.get_connection() as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO cash_balances (account_id, currency, amount) VALUES (?, ?, 0)",
+                    (account_id, currency))
+                conn.execute(
+                    "UPDATE cash_balances SET amount = amount + ? WHERE account_id=? AND currency=?",
+                    (float(delta), account_id, currency))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Error adjust_cash {account_id}/{currency}: {e}")
+            return False
+
+    def get_holdings(self, account_id: int) -> List[Dict]:
+        try:
+            with self.get_connection() as conn:
+                return pd.read_sql(
+                    "SELECT symbol, shares, avg_cost, currency FROM holdings "
+                    "WHERE account_id=? ORDER BY symbol", conn, params=[account_id]).to_dict('records')
+        except Exception as e:
+            logger.error(f"Error get_holdings {account_id}: {e}")
+            return []
+
+    def get_holding(self, account_id: int, symbol: str) -> Optional[Dict]:
+        try:
+            with self.get_connection() as conn:
+                df = pd.read_sql("SELECT * FROM holdings WHERE account_id=? AND symbol=?",
+                                 conn, params=[account_id, symbol])
+                return df.to_dict('records')[0] if not df.empty else None
+        except Exception as e:
+            logger.error(f"Error get_holding {account_id}/{symbol}: {e}")
+            return None
+
+    def upsert_holding(self, account_id: int, symbol: str, shares: float,
+                       avg_cost: float, currency: Optional[str]) -> bool:
+        """Set a position. shares<=0 removes it."""
+        try:
+            with self.get_connection() as conn:
+                if shares <= 0:
+                    conn.execute("DELETE FROM holdings WHERE account_id=? AND symbol=?",
+                                 (account_id, symbol))
+                else:
+                    conn.execute(
+                        "INSERT INTO holdings (account_id, symbol, shares, avg_cost, currency, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?) "
+                        "ON CONFLICT(account_id, symbol) DO UPDATE SET "
+                        "shares=excluded.shares, avg_cost=excluded.avg_cost, "
+                        "currency=excluded.currency, updated_at=excluded.updated_at",
+                        (account_id, symbol, float(shares), float(avg_cost), currency, datetime.now()))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Error upsert_holding {account_id}/{symbol}: {e}")
+            return False
+
+    def add_trade(self, trade: Dict) -> bool:
+        """Append a fill to the trade ledger."""
+        try:
+            with self.get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO trades (account_id, symbol, side, shares, price, currency, kind, rationale) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (trade['account_id'], trade['symbol'], trade['side'], float(trade['shares']),
+                     float(trade['price']), trade.get('currency'), trade.get('kind', 'paper'),
+                     trade.get('rationale')))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Error add_trade {trade.get('account_id')}/{trade.get('symbol')}: {e}")
+            return False
+
+    def get_trades(self, account_id: int, limit: int = 200) -> List[Dict]:
+        try:
+            with self.get_connection() as conn:
+                return pd.read_sql(
+                    "SELECT * FROM trades WHERE account_id=? ORDER BY created_at DESC, id DESC LIMIT ?",
+                    conn, params=[account_id, limit]).to_dict('records')
+        except Exception as e:
+            logger.error(f"Error get_trades {account_id}: {e}")
+            return []
+
     # Utility methods
-    def log_ingestion(self, symbol: str, data_type: str, start_date: Optional[str], 
+    def log_ingestion(self, symbol: str, data_type: str, start_date: Optional[str],
                      end_date: Optional[str], records: int, success: bool, 
                      error_message: Optional[str] = None):
         """Log data ingestion attempts"""

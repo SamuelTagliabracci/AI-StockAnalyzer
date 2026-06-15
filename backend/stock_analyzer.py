@@ -711,8 +711,9 @@ class StockAnalyzer:
         risk_score += vol_risk
         breakdown['volatility_risk'] = vol_risk
         
-        # Beta risk (0-20)
-        beta = fundamentals.get('beta', 1.0) if fundamentals else 1.0
+        # Beta risk (0-20). ETFs/funds often report beta as null, so coerce a missing
+        # OR explicitly-None beta to a neutral 1.0 ( .get's default doesn't cover None ).
+        beta = (fundamentals.get('beta') if fundamentals else None) or 1.0
         if beta > 1.5:
             beta_risk = 20
         elif beta > 1.2:

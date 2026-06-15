@@ -22,6 +22,7 @@ class DataIngestionManager:
         self.db = db_manager
         self.daily_limit_reached = False
         self.last_request_time = 0
+        self._news_cache: Dict[str, Tuple[float, List[Dict]]] = {}  # symbol → (fetched_at, items)
         
         # Import the investable universe and settings from config
         try:
@@ -130,6 +131,46 @@ class DataIngestionManager:
             self._handle_rate_limit_error(error_msg)
             return None
     
+    def get_company_news(self, symbol: str, limit: int = 20) -> List[Dict]:
+        """Recent news + announcements for a symbol from Yahoo Finance.
+
+        Normalizes yfinance's nested `news[i]['content']` into a flat, frontend-friendly
+        shape. contentType PRESS_RELEASE is flagged as an 'announcement' vs a 'story'/'video'.
+        Cached in-memory for 10 min so the per-stock detail view doesn't hammer Yahoo.
+        """
+        now = time.time()
+        cached = self._news_cache.get(symbol)
+        if cached and now - cached[0] < 600:
+            return cached[1][:limit]
+        try:
+            self._respect_rate_limit()
+            raw = yf.Ticker(symbol).news or []
+        except Exception as e:
+            logger.error(f"Error getting news for {symbol}: {e}")
+            return cached[1][:limit] if cached else []
+
+        items = []
+        for n in raw:
+            c = n.get('content') or n  # tolerate both new (nested) and old (flat) shapes
+            ctype = (c.get('contentType') or 'STORY').upper()
+            url = (c.get('clickThroughUrl') or c.get('canonicalUrl') or {})
+            url = url.get('url') if isinstance(url, dict) else url
+            provider = c.get('provider') or {}
+            thumb = c.get('thumbnail') or {}
+            items.append({
+                'id': c.get('id') or n.get('id'),
+                'title': c.get('title'),
+                'summary': c.get('summary') or c.get('description'),
+                'publisher': provider.get('displayName') if isinstance(provider, dict) else None,
+                'published_at': c.get('pubDate') or c.get('displayTime'),
+                'url': url,
+                'thumbnail': thumb.get('originalUrl') if isinstance(thumb, dict) else None,
+                'kind': 'announcement' if 'PRESS' in ctype else ctype.lower(),
+            })
+        items = [i for i in items if i.get('title')]
+        self._news_cache[symbol] = (now, items)
+        return items[:limit]
+
     def get_fundamental_data(self, symbol: str) -> Optional[Dict]:
         """Get fundamental data from Yahoo Finance"""
         if self.daily_limit_reached:

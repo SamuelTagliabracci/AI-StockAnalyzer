@@ -1,68 +1,103 @@
-import { useEffect, useState } from 'react'
-import { ThemeProvider, useTheme } from './themes/ThemeContext'
-import { useStocks, useCandles } from './data/hooks'
+import { useState } from 'react'
+import { ThemeProvider } from './themes/ThemeContext'
+import { useStocks } from './data/hooks'
 import { Header } from './components/Header'
 import { TickerTape } from './components/TickerTape'
 import { Watchlist } from './components/Watchlist'
-import { PriceChart } from './components/PriceChart'
-import { AICallPanel } from './components/AICallPanel'
-import { fmt, pct } from './util'
+import { SmartMoney } from './components/SmartMoney'
+import { MarketView } from './components/MarketView'
+import { StockDetail } from './components/StockDetail'
+import { AITraders } from './components/AITraders'
+import { Portfolio } from './components/Portfolio'
+import clsx from 'clsx'
+
+// Market is the front door; Detail is reached by clicking a stock (no top-level tab).
+type View = 'market' | 'detail' | 'feed' | 'traders' | 'portfolio'
+
+const NAV: { key: View; label: string; live?: boolean }[] = [
+  { key: 'market', label: '🏛 Market' },
+  { key: 'feed', label: '💰 Smart Money', live: true },
+  { key: 'traders', label: '🤖 AI Traders' },
+  { key: 'portfolio', label: '💼 My Portfolio' },
+]
 
 function Terminal() {
-  const { theme } = useTheme()
   const { data: stocks, isLoading, isError, error } = useStocks()
+  const [view, setView] = useState<View>('market')
   const [selected, setSelected] = useState<string | null>(null)
-
-  // Default the selection to the top-ranked stock once data arrives.
-  useEffect(() => {
-    if (!selected && stocks && stocks.length) setSelected(stocks[0].symbol)
-  }, [stocks, selected])
-
-  const stock = stocks?.find((s) => s.symbol === selected) ?? stocks?.[0]
-  const { data: candles } = useCandles(stock?.symbol)
+  // In feed view the watchlist filters the Smart Money feed; null = whole market.
+  const [feedSymbol, setFeedSymbol] = useState<string | null>(null)
 
   if (isLoading) return <CenterMsg title="CONNECTING" sub="Loading market data from the backend…" />
   if (isError) return <CenterMsg title="BACKEND OFFLINE" sub={`${(error as Error)?.message ?? 'Could not reach /api'} — is the Flask server running on :5000?`} />
-  if (!stocks || !stocks.length || !stock) return <CenterMsg title="NO DATA" sub="The backend returned no analyzed stocks yet." />
+  if (!stocks || !stocks.length) return <CenterMsg title="NO DATA" sub="The backend returned no analyzed stocks yet." />
 
-  const up = stock.changePct >= 0
+  const detailStock = stocks.find((s) => s.symbol === selected)
+
+  function openDetail(symbol: string) {
+    setSelected(symbol)
+    setView('detail')
+  }
 
   return (
     <div className="scanlines relative h-full flex flex-col gap-2 p-2" style={{ zIndex: 1 }}>
       <Header />
       <TickerTape stocks={stocks} />
 
-      <div className="flex gap-2 flex-1 min-h-0">
-        <Watchlist stocks={stocks} selected={stock.symbol} onSelect={setSelected} />
-
-        {/* Center: symbol header + chart */}
-        <main className="panel panel-glow flex-1 flex flex-col min-w-0 overflow-hidden">
-          <div className="px-4 py-3 border-b flex items-end justify-between flex-wrap gap-3" style={{ borderColor: 'var(--border)' }}>
-            <div className="flex items-baseline gap-3">
-              <h1 className="mono font-bold text-[26px] tracking-wide" style={{ color: 'var(--text-bright)' }}>
-                {stock.symbol}
-              </h1>
-              <span className="dim text-[13px]">{stock.name}</span>
-              <span className="tag">{stock.sector}</span>
-            </div>
-            <div className="flex items-baseline gap-3">
-              <span className="mono text-[26px]" style={{ color: 'var(--text-bright)' }}>
-                {fmt(stock.price)}
-              </span>
-              <span className="dim text-[12px]">{stock.currency}</span>
-              <span className={`mono text-[16px] ${up ? 'up' : 'down'}`}>
-                {up ? '▲' : '▼'} {pct(stock.changePct)}
-              </span>
-            </div>
-          </div>
-          <div className="flex-1 min-h-0 p-2">
-            <PriceChart candles={candles ?? []} themeKey={theme} />
-          </div>
-        </main>
-
-        {/* key by symbol so the agent switcher resets to the default when you change stocks */}
-        <AICallPanel key={stock.symbol} stock={stock} />
+      {/* Top-level navigation — prominent .btn tabs. */}
+      <div className="flex items-center gap-2">
+        {NAV.map((n) => (
+          <button
+            key={n.key}
+            onClick={() => setView(n.key)}
+            className={clsx('btn flex items-center gap-1.5', view === n.key && 'btn-active')}
+          >
+            {n.label}
+            {n.live && <span className="live-dot" />}
+          </button>
+        ))}
+        {view === 'detail' && detailStock && (
+          <span className="dim text-[11px]">viewing {detailStock.symbol} — pick another from 🏛 Market</span>
+        )}
+        {view === 'feed' && (
+          <span className="dim text-[11px]">
+            {feedSymbol ? `showing ${feedSymbol} — click a different ticker or “✕” for the whole market` : 'whole market — click a ticker to filter'}
+          </span>
+        )}
       </div>
+
+      {view === 'market' && (
+        <div className="flex gap-2 flex-1 min-h-0">
+          <MarketView stocks={stocks} onSelectSymbol={openDetail} />
+        </div>
+      )}
+
+      {view === 'detail' && (
+        <div className="flex gap-2 flex-1 min-h-0">
+          {detailStock
+            ? <StockDetail stock={detailStock} onBack={() => setView('market')} />
+            : <CenterMsg title="PICK A STOCK" sub="Choose a stock from the Market view to see its detail." />}
+        </div>
+      )}
+
+      {view === 'feed' && (
+        <div className="flex gap-2 flex-1 min-h-0">
+          <Watchlist stocks={stocks} selected={feedSymbol ?? ''} onSelect={setFeedSymbol} />
+          <SmartMoney symbol={feedSymbol} onClearSymbol={() => setFeedSymbol(null)} />
+        </div>
+      )}
+
+      {view === 'traders' && (
+        <div className="flex gap-2 flex-1 min-h-0">
+          <AITraders onSelectSymbol={openDetail} />
+        </div>
+      )}
+
+      {view === 'portfolio' && (
+        <div className="flex gap-2 flex-1 min-h-0">
+          <Portfolio onSelectSymbol={openDetail} />
+        </div>
+      )}
     </div>
   )
 }

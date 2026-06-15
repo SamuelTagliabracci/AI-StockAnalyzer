@@ -60,6 +60,7 @@ class Config:
         'CRM',    # Salesforce
         'AMD',    # Advanced Micro Devices
         'INTC',   # Intel
+        'MU',     # Micron Technology
         'CSCO',   # Cisco
         'QCOM',   # Qualcomm
         'TXN',    # Texas Instruments
@@ -197,6 +198,10 @@ class Config:
         'DOO.TO',   # BRP Inc.
         'NFI.TO',   # NFI Group Inc.
         'KEY.TO',   # Keyera Corp.
+
+        # ETFs / split-share funds (note: thin/absent fundamentals — beta etc. may be null)
+        'DFN.TO',   # Dividend 15 Split Corp.
+        'HCAL.TO',  # Hamilton Enhanced Canadian Bank ETF
     ]
 
     # The full investable universe ingestion + analysis run against.

@@ -45,6 +45,12 @@ def _pct(a, b):
 
 def bundle(db: DatabaseManager, symbol: str) -> dict:
     """Assemble everything Claude needs to form a verdict on one symbol."""
+    # Broad-market mood (CNN Fear & Greed), cached & non-raising — context for the call.
+    try:
+        from market_sentiment import fear_greed_brief
+        sentiment = fear_greed_brief()
+    except Exception:
+        sentiment = None
     comp = db.get_company(symbol) or {}
     analysis = db.get_latest_analysis(symbol) or {}
     fund = db.get_latest_fundamentals(symbol) or {}
@@ -85,6 +91,8 @@ def bundle(db: DatabaseManager, symbol: str) -> dict:
             "target_price": analysis.get("target_price"),
         },
         "fundamentals": {k: fund.get(k) for k in _FUND_KEYS if fund.get(k) is not None},
+        # Market-wide sentiment: {score 0-100, rating}. Context, not a per-stock signal.
+        "market_sentiment": sentiment,
     }
 
 
