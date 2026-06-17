@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { usePortfolio, useTrades } from '../data/hooks'
-import { fmt, pct, money, compact, timeAgo } from '../util'
+import { fmt, pct, compact, timeAgo } from '../util'
 
 // Renders any account's holdings + recent trades. Reused by AI Traders and My Portfolio.
 export function AccountPortfolio({ accountId, onSelectSymbol }: { accountId: number; onSelectSymbol?: (s: string) => void }) {
